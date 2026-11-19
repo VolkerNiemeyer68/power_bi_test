@@ -1,0 +1,12 @@
+DEFINE
+    VAR _Benutzer =
+        MINX(
+            FILTER(ALL('verwaltung azure_gruppen_user'[Benutzer]), NOT ISBLANK('verwaltung azure_gruppen_user'[Benutzer])),
+            'verwaltung azure_gruppen_user'[Benutzer]
+        )
+EVALUATE
+    CALCULATETABLE(
+        VALUES('verwaltung azure_gruppen_user'[Gruppe]),
+        'verwaltung azure_gruppen_user'[Benutzer] = _Benutzer
+    )
+ORDER BY 'verwaltung azure_gruppen_user'[Gruppe]

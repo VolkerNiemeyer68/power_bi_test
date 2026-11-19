@@ -1,0 +1,27 @@
+DEFINE
+    VAR _CurrentUser = LOWER(TRIM(USERPRINCIPALNAME()))
+    VAR _ShowAll = _CurrentUser = "bg-pp@brand-group.com"
+EVALUATE
+    CALCULATETABLE(
+        SUMMARIZE(
+            'Incident',
+            'Incident'[Anfragenummer],
+            'Incident'[Anfragetitel],
+            'Incident'[Statusgrund],
+            'Incident'[prioritycode_display],
+            'Incident'[Erstellt am],
+            'Incident'[Link]
+        ),
+        FILTER(
+            'Incident',
+            'Incident'[Status] = "Aktiv"
+                && (
+                    _ShowAll
+                        || (
+                            _CurrentUser <> ""
+                                && LOWER(TRIM(RELATED('Contact'[emailaddress1]))) = _CurrentUser
+                        )
+                )
+        )
+    )
+ORDER BY 'Incident'[Erstellt am] DESC, 'Incident'[Anfragenummer] ASC

@@ -1,0 +1,10 @@
+EVALUATE
+FILTER(
+    SUMMARIZE(
+        'verwaltung azure_gruppen_user',
+        'verwaltung azure_gruppen_user'[Benutzer],
+        'verwaltung azure_gruppen_user'[Name]
+    ),
+    NOT ISBLANK('verwaltung azure_gruppen_user'[Benutzer])
+)
+ORDER BY 'verwaltung azure_gruppen_user'[Name], 'verwaltung azure_gruppen_user'[Benutzer]

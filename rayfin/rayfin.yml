@@ -1,0 +1,97 @@
+id: power-bi-test
+name: servicedesk_rayfin
+version: 1.0.0
+services:
+  auth:
+    enabled: true
+    fabric:
+      enabled: true
+    allowedRedirectUris:
+      - http://localhost:5173
+      - http://localhost:5174
+      - http://127.0.0.1:5174
+      - https://brisk-rapid-d9a816c8fa-westeurope.webapp.fabricapps.net
+  data:
+    enabled: true
+    dialect: mssql
+  storage:
+    enabled: false
+  staticHosting:
+    enabled: true
+    folder: dist
+    buildCommand: npm run build:fabric
+    indexDocument: index.html
+    assetAccess: protected
+  functions:
+    enabled: false
+connectors:
+  - name: mitarbeiter
+    config:
+      workspaceId: 08775ebe-0b0d-4aa5-982e-6da664c5cae0
+      itemId: f8ff5f1d-b459-447c-9ea2-529e874d0699
+    auth:
+      type: delegated
+    version: "1"
+    operations:
+      - name: executeQuery
+    type: fabric-semanticmodel
+  - name: servicedesk-dashboard
+    config:
+      workspaceId: 08775ebe-0b0d-4aa5-982e-6da664c5cae0
+      itemId: 0f591231-10a7-43b9-862a-8f4c543ad566
+    auth:
+      type: delegated
+    version: "1"
+    operations:
+      - name: executeQuery
+    type: fabric-semanticmodel
+  - name: servicedesk-anfragenprioliste
+    config:
+      workspaceId: 08775ebe-0b0d-4aa5-982e-6da664c5cae0
+      itemId: 814786ce-8101-4599-b92a-53993c5acab7
+    auth:
+      type: delegated
+    version: "1"
+    operations:
+      - name: executeQuery
+    type: fabric-semanticmodel
+  - name: servicedesk-app
+    config:
+      workspaceId: 08775ebe-0b0d-4aa5-982e-6da664c5cae0
+      itemId: ee45cbbe-21c8-4cef-a183-b79d0d71e946
+    auth:
+      type: delegated
+    version: "1"
+    operations:
+      - name: executeQuery
+    type: fabric-semanticmodel
+  - name: servicedesk-projekte
+    config:
+      workspaceId: 08775ebe-0b0d-4aa5-982e-6da664c5cae0
+      itemId: 479aaefe-8ea0-4569-95ed-30556c56f42b
+    auth:
+      type: delegated
+    version: "1"
+    operations:
+      - name: executeQuery
+    type: fabric-semanticmodel
+  - name: servicedesk-kennzahlen
+    config:
+      workspaceId: 08775ebe-0b0d-4aa5-982e-6da664c5cae0
+      itemId: 7ac71591-88b7-4146-af36-ab6117fe7ea7
+    auth:
+      type: delegated
+    version: "1"
+    operations:
+      - name: executeQuery
+    type: fabric-semanticmodel
+  - name: servicedesk-status-live
+    type: fabric-semanticmodel
+    config:
+      workspaceId: 08775ebe-0b0d-4aa5-982e-6da664c5cae0
+      itemId: bbd4c88f-5f0b-4742-b163-64b8bd87ac1e
+    auth:
+      type: delegated
+    version: "1"
+    operations:
+      - name: executeQuery

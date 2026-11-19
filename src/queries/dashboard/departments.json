@@ -1,0 +1,30 @@
+{
+    "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+    "description": "Top 10 Abteilungen und Rest nach Anzahl aktiver Servicedesk-Anfragen aus dem stündlichen Import.",
+    "width": "container",
+    "height": "container",
+    "mark": "arc",
+    "transform": [
+        {
+            "window": [{ "op": "row_number", "as": "position" }],
+            "sort": [
+                { "field": "active", "order": "descending" },
+                { "field": "department", "order": "ascending" }
+            ]
+        },
+        { "calculate": "datum.position <= 10 ? datum.department : 'Rest'", "as": "department" },
+        {
+            "aggregate": [{ "op": "sum", "field": "active", "as": "active" }],
+            "groupby": ["department"]
+        }
+    ],
+    "encoding": {
+        "theta": { "field": "active", "type": "quantitative" },
+        "color": { "field": "department", "type": "nominal", "legend": null, "sort": "ascending" },
+        "order": { "field": "active", "type": "quantitative", "sort": "descending" },
+        "tooltip": [
+            { "field": "department", "type": "nominal" },
+            { "field": "active", "type": "quantitative" }
+        ]
+    }
+}

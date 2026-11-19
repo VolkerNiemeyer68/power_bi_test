@@ -1,0 +1,285 @@
+{
+  "compatibilityLevel": 1567,
+  "model": {
+    "culture": "de-DE",
+    "sourceQueryCulture": "de-DE",
+    "defaultPowerBIDataSourceVersion": "powerBI_V3",
+    "annotations": [
+      {
+        "name": "__PBI_TimeIntelligenceEnabled",
+        "value": "0"
+      }
+    ],
+    "tables": [
+      {
+        "name": "Snapshot",
+        "columns": [
+          {
+            "name": "ActiveRequests",
+            "sourceColumn": "ActiveRequests",
+            "dataType": "int64",
+            "summarizeBy": "none",
+            "formatString": "#,0"
+          },
+          {
+            "name": "ActiveWithCreated",
+            "sourceColumn": "ActiveWithCreated",
+            "dataType": "int64",
+            "summarizeBy": "none",
+            "formatString": "#,0"
+          },
+          {
+            "name": "ResolvedRequests",
+            "sourceColumn": "ResolvedRequests",
+            "dataType": "int64",
+            "summarizeBy": "none",
+            "formatString": "#,0"
+          },
+          {
+            "name": "ResolvedWithEffort",
+            "sourceColumn": "ResolvedWithEffort",
+            "dataType": "int64",
+            "summarizeBy": "none",
+            "formatString": "#,0"
+          },
+          {
+            "name": "ProjectsWithEffort",
+            "sourceColumn": "ProjectsWithEffort",
+            "dataType": "int64",
+            "summarizeBy": "none",
+            "formatString": "#,0"
+          },
+          {
+            "name": "TotalRequests",
+            "sourceColumn": "TotalRequests",
+            "dataType": "int64",
+            "summarizeBy": "none",
+            "formatString": "#,0"
+          },
+          {
+            "name": "AverageActiveDays",
+            "sourceColumn": "AverageActiveDays",
+            "dataType": "double",
+            "summarizeBy": "none",
+            "formatString": "#,0.0"
+          },
+          {
+            "name": "AverageResolutionHours",
+            "sourceColumn": "AverageResolutionHours",
+            "dataType": "double",
+            "summarizeBy": "none",
+            "formatString": "#,0.0"
+          },
+          {
+            "name": "AverageProjectDays",
+            "sourceColumn": "AverageProjectDays",
+            "dataType": "double",
+            "summarizeBy": "none",
+            "formatString": "#,0.0"
+          },
+          {
+            "name": "SnapshotUtc",
+            "sourceColumn": "SnapshotUtc",
+            "dataType": "dateTime",
+            "summarizeBy": "none",
+            "formatString": "General Date"
+          }
+        ],
+        "partitions": [
+          {
+            "name": "Snapshot",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    SnapshotUtc = DateTimeZone.RemoveZone(DateTimeZone.FixedUtcNow()),",
+                "    Source = CommonDataService.Database(\"brandgroup-service.crm4.dynamics.com\"),",
+                "    Incidents = Table.Buffer(Table.SelectColumns(",
+                "        Source{[Schema=\"dbo\", Item=\"incident\"]}[Data],",
+                "        {\"incidentid\", \"statecode\", \"createdon\", \"new_time_estimated\"}",
+                "    )),",
+                "    Resolutions = Table.SelectColumns(",
+                "        Source{[Schema=\"dbo\", Item=\"incidentresolution\"]}[Data],",
+                "        {\"incidentid\", \"timespent\"}",
+                "    ),",
+                "    Active = Table.SelectRows(Incidents, each [statecode] = 0),",
+                "    ActiveWithCreated = Table.SelectRows(Active, each [createdon] <> null),",
+                "    ActiveAges = List.Transform(ActiveWithCreated[createdon], each Duration.TotalDays(SnapshotUtc - DateTime.From(_))),",
+                "    Resolved = Table.SelectRows(Incidents, each [statecode] = 1),",
+                "    EffortPerIncident = Table.Group(Resolutions, {\"incidentid\"}, {",
+                "        {\"EffortMinutes\", each List.Sum([timespent]), type nullable number}",
+                "    }),",
+                "    ResolvedWithEffort = Table.NestedJoin(Resolved, {\"incidentid\"}, EffortPerIncident, {\"incidentid\"}, \"Effort\", JoinKind.Inner),",
+                "    ResolvedEffort = Table.ExpandTableColumn(ResolvedWithEffort, \"Effort\", {\"EffortMinutes\"}),",
+                "    EffortMinutes = List.RemoveNulls(ResolvedEffort[EffortMinutes]),",
+                "    ProjectDays = List.RemoveNulls(Incidents[new_time_estimated]),",
+                "    Snapshot = #table(",
+                "        type table [",
+                "            ActiveRequests = Int64.Type,",
+                "            AverageActiveDays = nullable number,",
+                "            AverageResolutionHours = nullable number,",
+                "            AverageProjectDays = nullable number,",
+                "            ActiveWithCreated = Int64.Type,",
+                "            ResolvedRequests = Int64.Type,",
+                "            ResolvedWithEffort = Int64.Type,",
+                "            ProjectsWithEffort = Int64.Type,",
+                "            TotalRequests = Int64.Type,",
+                "            SnapshotUtc = datetime",
+                "        ],",
+                "        {{",
+                "            Table.RowCount(Active),",
+                "            List.Average(ActiveAges),",
+                "            List.Average(EffortMinutes) / 60,",
+                "            List.Average(ProjectDays),",
+                "            Table.RowCount(ActiveWithCreated),",
+                "            Table.RowCount(Resolved),",
+                "            List.Count(EffortMinutes),",
+                "            List.Count(ProjectDays),",
+                "            Table.RowCount(Incidents),",
+                "            SnapshotUtc",
+                "        }}",
+                "    )",
+                "in",
+                "    Snapshot",
+                ""
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "DepartmentSnapshot",
+        "columns": [
+          {
+            "name": "Department",
+            "sourceColumn": "Department",
+            "dataType": "string",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "ActiveRequests",
+            "sourceColumn": "ActiveRequests",
+            "dataType": "int64",
+            "summarizeBy": "sum",
+            "formatString": "#,0"
+          }
+        ],
+        "partitions": [
+          {
+            "name": "DepartmentSnapshot",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = CommonDataService.Database(\"brandgroup-service.crm4.dynamics.com\"),",
+                "    Incidents = Table.SelectColumns(",
+                "        Source{[Schema=\"dbo\", Item=\"incident\"]}[Data],",
+                "        {\"statecode\", \"customerid\"}",
+                "    ),",
+                "    Active = Table.SelectRows(Incidents, each [statecode] = 0),",
+                "    Contacts = Table.SelectColumns(",
+                "        Source{[Schema=\"dbo\", Item=\"contact\"]}[Data],",
+                "        {\"contactid\", \"department\"}",
+                "    ),",
+                "    Joined = Table.NestedJoin(Active, {\"customerid\"}, Contacts, {\"contactid\"}, \"Contact\", JoinKind.LeftOuter),",
+                "    Expanded = Table.ExpandTableColumn(Joined, \"Contact\", {\"department\"}, {\"Department\"}),",
+                "    Departments = Table.TransformColumns(Expanded, {",
+                "        {\"Department\", each if _ = null or Text.Trim(_) = \"\" then \"Ohne Abteilung\" else Text.Trim(_), type text}",
+                "    }),",
+                "    Counts = Table.Group(Departments, {\"Department\"}, {",
+                "        {\"ActiveRequests\", each Table.RowCount(_), Int64.Type}",
+                "    })",
+                "in",
+                "    Counts",
+                ""
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "DailyRequestSnapshot",
+        "columns": [
+          {
+            "name": "Day",
+            "sourceColumn": "Day",
+            "dataType": "dateTime",
+            "summarizeBy": "none",
+            "formatString": "dd.MM.yyyy"
+          },
+          {
+            "name": "NewRequests",
+            "sourceColumn": "NewRequests",
+            "dataType": "int64",
+            "summarizeBy": "sum",
+            "formatString": "#,0"
+          },
+          {
+            "name": "EndedRequests",
+            "sourceColumn": "EndedRequests",
+            "dataType": "int64",
+            "summarizeBy": "sum",
+            "formatString": "#,0"
+          }
+        ],
+        "partitions": [
+          {
+            "name": "DailyRequestSnapshot",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    SnapshotUtc = DateTimeZone.RemoveZone(DateTimeZone.FixedUtcNow()),",
+                "    BerlinDate = (Utc as datetime) as date =>",
+                "        let",
+                "            Year = Date.Year(Date.From(Utc)),",
+                "            MarchEnd = #date(Year, 3, 31),",
+                "            OctoberEnd = #date(Year, 10, 31),",
+                "            SummerStart = #datetime(Year, 3, 31, 1, 0, 0) - #duration(Date.DayOfWeek(MarchEnd, Day.Sunday), 0, 0, 0),",
+                "            SummerEnd = #datetime(Year, 10, 31, 1, 0, 0) - #duration(Date.DayOfWeek(OctoberEnd, Day.Sunday), 0, 0, 0),",
+                "            Offset = if Utc >= SummerStart and Utc < SummerEnd then 2 else 1",
+                "        in",
+                "            Date.From(Utc + #duration(0, Offset, 0, 0)),",
+                "    EndDate = BerlinDate(SnapshotUtc),",
+                "    StartDate = Date.AddDays(EndDate, -60),",
+                "    EarliestUtc = DateTime.From(StartDate) - #duration(0, 2, 0, 0),",
+                "    Source = CommonDataService.Database(\"brandgroup-service.crm4.dynamics.com\"),",
+                "    Selected = Table.SelectColumns(",
+                "        Source{[Schema=\"dbo\", Item=\"incident\"]}[Data],",
+                "        {\"createdon\", \"deactivatedon\", \"statecode\"}",
+                "    ),",
+                "    Incidents = Table.Buffer(Table.SelectRows(Selected, each",
+                "        ([createdon] <> null and [createdon] >= EarliestUtc and [createdon] < SnapshotUtc)",
+                "        or ([deactivatedon] <> null and [deactivatedon] >= EarliestUtc and [deactivatedon] < SnapshotUtc and ([statecode] = 1 or [statecode] = 2))",
+                "    )),",
+                "    NewDays = Table.AddColumn(",
+                "        Table.SelectRows(Incidents, each [createdon] <> null),",
+                "        \"Day\", each BerlinDate(DateTime.From([createdon])), type date",
+                "    ),",
+                "    NewCounts = Table.Group(NewDays, {\"Day\"}, {{\"NewRequests\", each Table.RowCount(_), Int64.Type}}),",
+                "    EndedDays = Table.AddColumn(",
+                "        Table.SelectRows(Incidents, each [deactivatedon] <> null and ([statecode] = 1 or [statecode] = 2)),",
+                "        \"Day\", each BerlinDate(DateTime.From([deactivatedon])), type date",
+                "    ),",
+                "    EndedCounts = Table.Group(EndedDays, {\"Day\"}, {{\"EndedRequests\", each Table.RowCount(_), Int64.Type}}),",
+                "    Calendar = Table.FromColumns({List.Dates(StartDate, 60, #duration(1, 0, 0, 0))}, type table [Day = date]),",
+                "    WithNew = Table.NestedJoin(Calendar, {\"Day\"}, NewCounts, {\"Day\"}, \"New\", JoinKind.LeftOuter),",
+                "    ExpandedNew = Table.ExpandTableColumn(WithNew, \"New\", {\"NewRequests\"}),",
+                "    WithEnded = Table.NestedJoin(ExpandedNew, {\"Day\"}, EndedCounts, {\"Day\"}, \"Ended\", JoinKind.LeftOuter),",
+                "    ExpandedEnded = Table.ExpandTableColumn(WithEnded, \"Ended\", {\"EndedRequests\"}),",
+                "    Filled = Table.ReplaceValue(ExpandedEnded, null, 0, Replacer.ReplaceValue, {\"NewRequests\", \"EndedRequests\"}),",
+                "    Typed = Table.TransformColumnTypes(Filled, {{\"NewRequests\", Int64.Type}, {\"EndedRequests\", Int64.Type}})",
+                "in",
+                "    Typed",
+                ""
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

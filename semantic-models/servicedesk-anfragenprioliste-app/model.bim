@@ -1,0 +1,250 @@
+{
+  "compatibilityLevel": 1567,
+  "model": {
+    "culture": "de-DE",
+    "sourceQueryCulture": "de-DE",
+    "defaultPowerBIDataSourceVersion": "powerBI_V3",
+    "annotations": [
+      {
+        "name": "__PBI_TimeIntelligenceEnabled",
+        "value": "0"
+      }
+    ],
+    "tables": [
+      {
+        "name": "contact",
+        "columns": [
+          {
+            "name": "Kontakt",
+            "dataType": "string",
+            "sourceColumn": "contactid",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Abteilung",
+            "dataType": "string",
+            "sourceColumn": "department",
+            "summarizeBy": "none"
+          }
+        ],
+        "partitions": [
+          {
+            "name": "contact",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    SourceTable = (let\n    Quelle = CommonDataService.Database(\"brandgroup-service.crm4.dynamics.com\"),\n    dbo_contact = Quelle{[Schema=\"dbo\",Item=\"contact\"]}[Data]\nin\n    dbo_contact),",
+                "    SelectedColumns = Table.SelectColumns(SourceTable, {\"contactid\", \"department\"})",
+                "in",
+                "    SelectedColumns"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "incident",
+        "columns": [
+          {
+            "name": "Anfrage",
+            "dataType": "string",
+            "sourceColumn": "incidentid",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Anfragenummer",
+            "dataType": "string",
+            "sourceColumn": "ticketnumber",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Anfragetitel",
+            "dataType": "string",
+            "sourceColumn": "title",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "ownerid",
+            "dataType": "string",
+            "sourceColumn": "ownerid",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Bearbeiter",
+            "dataType": "string",
+            "sourceColumn": "owneridname",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "owninguser",
+            "dataType": "string",
+            "sourceColumn": "owninguser",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "customerid",
+            "dataType": "string",
+            "sourceColumn": "customerid",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Mitarbeiter",
+            "dataType": "string",
+            "sourceColumn": "customeridname",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Status",
+            "dataType": "int64",
+            "sourceColumn": "statecode",
+            "summarizeBy": "none",
+            "formatString": "0"
+          },
+          {
+            "name": "statecodename",
+            "dataType": "string",
+            "sourceColumn": "statecodename",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "statuscodename",
+            "dataType": "string",
+            "sourceColumn": "statuscodename",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Priorität",
+            "dataType": "string",
+            "sourceColumn": "prioritycodename",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Erstellt am",
+            "dataType": "dateTime",
+            "sourceColumn": "createdon",
+            "summarizeBy": "none",
+            "formatString": "Short Date"
+          },
+          {
+            "name": "Erinnerung am",
+            "dataType": "dateTime",
+            "sourceColumn": "new_bg_reminder_on",
+            "summarizeBy": "none",
+            "formatString": "Short Date"
+          },
+          {
+            "name": "Fertigstellungsgrad Info",
+            "dataType": "string",
+            "sourceColumn": "new_fertigstellungsgradinfo",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Anfragetyp",
+            "dataType": "string",
+            "sourceColumn": "casetypecodename",
+            "summarizeBy": "none"
+          }
+        ],
+        "measures": [
+          {
+            "name": "Link",
+            "expression": "\"https://brandgroup-service.crm4.dynamics.com/main.aspx?appid=8e97e941-f16d-ea11-a811-000d3a2c338a&pagetype=entityrecord&etn=incident&id=\" & CALCULATE(SELECTEDVALUE (incident[Anfrage]))"
+          },
+          {
+            "name": "Sortierung",
+            "expression": [
+              "",
+              "IF(ISBLANK(SELECTEDVALUE(Incident[Erinnerung am])) = TRUE(), 1, IF(DATEDIFF(TODAY(),SELECTEDVALUE(Incident[Erinnerung am]),DAY) < 1, 0, 2)) & ",
+              "IF(NOT(ISERROR(SELECTEDVALUE(incident[Fertigstellungsgrad Info]) + 0 )), IF(SELECTEDVALUE(incident[Fertigstellungsgrad Info]) = \"\", 99, INT(VALUE(SELECTEDVALUE(Incident[Fertigstellungsgrad Info])))), 99) & ",
+              "IF(SELECTEDVALUE(incident[statuscodename]) = \"Zurückgestellt\", 2, IF(SELECTEDVALUE(incident[statuscodename]) = \"Warten auf Details\", 1, 0))  & ",
+              "IF(SELECTEDVALUE(Incident[Anfragetyp]) = \"Fehler\", 0, IF(SELECTEDVALUE(Incident[Anfragetyp]) = \"Problem\", 1, 2)) &",
+              "YEAR(SELECTEDVALUE(incident[Erstellt am])) &",
+              "MONTH(SELECTEDVALUE(incident[Erstellt am])) &",
+              "DAY(SELECTEDVALUE(incident[Erstellt am]))"
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "incident",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    SourceTable = (let\n    Quelle = CommonDataService.Database(\"brandgroup-service.crm4.dynamics.com\"),\n    dbo_incident = Quelle{[Schema=\"dbo\",Item=\"incident\"]}[Data]\nin\n    dbo_incident),",
+                "    SelectedColumns = Table.SelectColumns(SourceTable, {\"incidentid\", \"ticketnumber\", \"title\", \"ownerid\", \"owneridname\", \"owninguser\", \"customerid\", \"customeridname\", \"statecode\", \"statecodename\", \"statuscodename\", \"prioritycodename\", \"createdon\", \"new_bg_reminder_on\", \"new_fertigstellungsgradinfo\", \"casetypecodename\"})",
+                "in",
+                "    SelectedColumns"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "systemuser",
+        "columns": [
+          {
+            "name": "Benutzer",
+            "dataType": "string",
+            "sourceColumn": "systemuserid",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Benutzername",
+            "dataType": "string",
+            "sourceColumn": "domainname",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Primäre E-Mail-Adresse",
+            "dataType": "string",
+            "sourceColumn": "internalemailaddress",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "Vollständiger Name",
+            "dataType": "string",
+            "sourceColumn": "fullname",
+            "summarizeBy": "none"
+          }
+        ],
+        "partitions": [
+          {
+            "name": "systemuser",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    SourceTable = (let\n    Quelle = CommonDataService.Database(\"brandgroup-service.crm4.dynamics.com\"),\n    dbo_systemuser = Quelle{[Schema=\"dbo\",Item=\"systemuser\"]}[Data]\nin\n    dbo_systemuser),",
+                "    SelectedColumns = Table.SelectColumns(SourceTable, {\"systemuserid\", \"domainname\", \"internalemailaddress\", \"fullname\"})",
+                "in",
+                "    SelectedColumns"
+              ]
+            }
+          }
+        ]
+      }
+    ],
+    "relationships": [
+      {
+        "name": "e790d876-8130-4b4d-8620-9a2b32a1e734",
+        "fromColumn": "customerid",
+        "fromTable": "incident",
+        "toColumn": "Kontakt",
+        "toTable": "contact"
+      },
+      {
+        "name": "9105dc6c-7a5a-461f-8d51-40c43e016d0f",
+        "fromColumn": "owninguser",
+        "fromTable": "incident",
+        "isActive": false,
+        "toColumn": "Benutzer",
+        "toTable": "systemuser"
+      }
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+DEFINE
+    VAR _CurrentUser = LOWER(TRIM(USERPRINCIPALNAME()))
+    VAR _ShowAll = _CurrentUser = "bg-pp@brand-group.com"
+    VAR _Users = FILTER(
+        SUMMARIZE(
+            'systemuser',
+            'systemuser'[Benutzer],
+            'systemuser'[Benutzername],
+            'systemuser'[Primäre E-Mail-Adresse],
+            'systemuser'[Vollständiger Name]
+        ),
+        _CurrentUser <> ""
+            && (
+                LOWER(TRIM('systemuser'[Benutzername])) = _CurrentUser
+                    || LOWER(TRIM('systemuser'[Primäre E-Mail-Adresse])) = _CurrentUser
+            )
+    )
+EVALUATE
+    ROW(
+        "ShowAll", _ShowAll,
+        "Owner", IF(NOT _ShowAll, MAXX(_Users, 'systemuser'[Vollständiger Name])),
+        "Matches", COUNTROWS(_Users)
+    )

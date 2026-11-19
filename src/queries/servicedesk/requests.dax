@@ -1,0 +1,17 @@
+EVALUATE
+    SUMMARIZECOLUMNS(
+        'incident'[Anfrage],
+        'incident'[Anfragenummer],
+        'incident'[Anfragetitel],
+        'incident'[Bearbeiter],
+        'incident'[Mitarbeiter],
+        'contact'[Abteilung],
+        'incident'[statecodename],
+        'incident'[statuscodename],
+        'incident'[Priorität],
+        'incident'[Erstellt am],
+        /*__FILTER_ARGUMENTS__*/
+        "Link", IF(NOT ISEMPTY('incident'), [Link]),
+        "Sortierung", IGNORE([Sortierung])
+    )
+ORDER BY [Sortierung] ASC, 'incident'[Anfragenummer] ASC

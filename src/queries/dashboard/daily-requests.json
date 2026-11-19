@@ -1,0 +1,49 @@
+{
+    "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+    "description": "Verhältnis der täglich neu erstellten und beendeten Anfragen in den letzten 60 abgeschlossenen Tagen.",
+    "width": "container",
+    "height": "container",
+    "transform": [
+        { "calculate": "toDate(substring(datum.day, 0, 10) + 'T00:00:00Z')", "as": "chartDay" },
+        { "calculate": "utcFormat(datum.chartDay, '%d.%m.%Y')", "as": "displayDay" },
+        { "fold": ["newRequests", "endedRequests"], "as": ["kind", "count"] },
+        { "calculate": "datum.kind === 'newRequests' ? 'Neu' : 'Beendet'", "as": "status" },
+        { "calculate": "datum.kind === 'newRequests' ? 0 : 1", "as": "seriesOrder" },
+        { "joinaggregate": [{ "op": "sum", "field": "count", "as": "total" }], "groupby": ["day"] },
+        { "calculate": "datum.total > 0 ? datum.count / datum.total : 0", "as": "share" },
+        { "calculate": "round(datum.share * 100) + '%'", "as": "percentage" },
+        { "stack": "share", "groupby": ["day"], "sort": [{ "field": "seriesOrder", "order": "ascending" }], "as": ["start", "end"] },
+        { "calculate": "(datum.start + datum.end) / 2", "as": "middle" }
+    ],
+    "encoding": {
+        "x": {
+            "field": "chartDay", "type": "temporal", "scale": { "type": "utc" }, "timeUnit": "utcyearmonthdate",
+            "axis": { "title": null, "labelAngle": -60, "labelExpr": "utcFormat(datum.value, '%d.%m.%Y')", "tickCount": { "interval": "day", "step": 2 } }
+        }
+    },
+    "layer": [
+        {
+            "mark": "bar",
+            "encoding": {
+                "y": { "field": "start", "type": "quantitative", "scale": { "domain": [0, 1] }, "axis": { "title": "Anteil Neu / Beendet", "labelExpr": "round(datum.value * 100) + '%'" } },
+                "y2": { "field": "end" },
+                "color": { "field": "status", "type": "nominal", "title": null, "scale": { "domain": ["Neu", "Beendet"], "range": ["firebrick", "forestgreen"] }, "legend": { "orient": "top" } },
+                "tooltip": [
+                    { "field": "displayDay", "type": "ordinal", "title": "Tag" },
+                    { "field": "status", "type": "nominal", "title": "Ereignis" },
+                    { "field": "count", "type": "quantitative", "title": "Anfragen" },
+                    { "field": "percentage", "type": "nominal", "title": "Anteil" }
+                ]
+            }
+        },
+        {
+            "transform": [{ "filter": "datum.share >= 0.1" }],
+            "mark": { "type": "text", "angle": 270, "baseline": "middle", "fontWeight": "normal", "color": "white" },
+            "encoding": {
+                "x": { "field": "chartDay", "type": "temporal", "scale": { "type": "utc" }, "timeUnit": "utcyearmonthdate", "bandPosition": 0.5 },
+                "y": { "field": "middle", "type": "quantitative", "axis": { "title": "Anteil Neu / Beendet", "labelExpr": "round(datum.value * 100) + '%'" } },
+                "text": { "field": "percentage" }
+            }
+        }
+    ]
+}

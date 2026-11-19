@@ -1,0 +1,9 @@
+EVALUATE
+    SUMMARIZE(
+        'incident',
+        'incident'[Bearbeiter],
+        'incident'[Mitarbeiter],
+        'contact'[Abteilung],
+        'incident'[statecodename]
+    )
+ORDER BY 'incident'[Bearbeiter], 'incident'[Mitarbeiter], 'contact'[Abteilung], 'incident'[statecodename]
