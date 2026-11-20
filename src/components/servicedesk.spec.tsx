@@ -1,21 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Servicedesk } from "./servicedesk";
-import { querySemanticModel, useSemanticModelQuery } from "@/hooks/use-semantic-model-query";
+import { useSemanticModelQuery } from "@/hooks/use-semantic-model-query";
 import type { QueryFactoryTargetState } from "@/hooks/use-query-factory-target";
 import type { DataTable } from "@microsoft/fabric-visuals-core";
 import { toDataTable } from "@/lib/to-data-table";
-import { requests } from "@/queries/servicedesk";
+import { liveRequests, requests } from "@/queries/servicedesk";
 
 vi.mock("@/hooks/theme.context", () => ({
     useThemeContext: () => ({ theme: undefined }),
 }));
 vi.mock("@/hooks/use-semantic-model-query", () => ({
     useSemanticModelQuery: vi.fn(),
-    querySemanticModel: vi.fn(),
 }));
 const { mockRequestTarget } = vi.hoisted(() => ({
-    mockRequestTarget: vi.fn<(targetId: string, factory: typeof requests, params: object, highlight: undefined, refreshVersion: number) => QueryFactoryTargetState<DataTable>>(),
+    mockRequestTarget: vi.fn<(targetId: string, factory: typeof requests, params: object, highlight: undefined, refreshVersion: number, refreshFactory?: typeof requests) => QueryFactoryTargetState<DataTable>>(),
 }));
 vi.mock("@/hooks/use-query-factory-target", () => ({
     useQueryFactoryTarget: mockRequestTarget,
@@ -86,8 +85,38 @@ describe("Servicedesk", () => {
         });
     });
     afterEach(() => {
+        vi.useRealTimers();
         vi.unstubAllGlobals();
         delete document.documentElement.dataset.formatLocale;
+    });
+
+    it("zeigt den nächsten geplanten Import in Berliner Zeit und aktualisiert ihn am Termin", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-11-20T09:29:59Z"));
+        vi.mocked(useSemanticModelQuery).mockReturnValue({
+            data: undefined, isLoading: true, error: undefined, refetch: vi.fn(),
+        });
+        const { unmount } = render(<Servicedesk />);
+        expect(screen.getByText(/Nächstes geplantes Datenupdate/)).toHaveTextContent("20.11.26, 10:30 Uhr (Berlin)");
+        act(() => vi.advanceTimersByTime(1000));
+        expect(screen.getByText(/Nächstes geplantes Datenupdate/)).toHaveTextContent("20.11.26, 11:00 Uhr (Berlin)");
+        unmount();
+    });
+
+    it("berücksichtigt den Tageswechsel und die Berliner Sommerzeit", () => {
+        vi.useFakeTimers();
+        vi.mocked(useSemanticModelQuery).mockReturnValue({
+            data: undefined, isLoading: true, error: undefined, refetch: vi.fn(),
+        });
+        vi.setSystemTime(new Date("2026-11-20T22:59:59Z"));
+        const { unmount } = render(<Servicedesk />);
+        expect(screen.getByText(/Nächstes geplantes Datenupdate/)).toHaveTextContent("21.11.26, 00:00 Uhr (Berlin)");
+        unmount();
+
+        vi.setSystemTime(new Date("2026-03-29T00:59:59Z"));
+        const second = render(<Servicedesk />);
+        expect(screen.getByText(/Nächstes geplantes Datenupdate/)).toHaveTextContent("29.03.26, 03:00 Uhr (Berlin)");
+        second.unmount();
     });
 
     it("verlinkt Nummer und Titel mit dem Modell-Link in einem neuen Tab", () => {
@@ -207,57 +236,20 @@ describe("Servicedesk", () => {
         expect(screen.getByRole("link", { name: table.rows[0][1] })).toBeInTheDocument();
     });
 
-    it("fragt erst bei Klick den Live-Status ab und behält den Statusfilter und die Suche bei", async () => {
-        const statusColumns = [table.columns[0], table.columns[6], table.columns[7]];
-        const other = table.rows[0].map((value, i) => i === 0 ? "00006503-0c18-ef11-9f89-6045bda06fb3" : i === 1 ? "CAS-2" : i === 2 ? "Drucker" : value);
-        mockRequestTarget.mockReturnValue({
-            status: "ready", data: toDataTable({ ...table, rows: [table.rows[0], other] }, requests().columnMetadata), isCrossHighlightActive: false,
-        });
-        vi.mocked(querySemanticModel).mockResolvedValueOnce({
-            status: "success", table: { columns: statusColumns, rows: [[table.rows[0][0], "Behoben", "Problem behoben"]] }, requestId: "", fromCache: false,
-        });
+    it("fordert beim Aktualisieren auch neue Anfragen live an und behält die Suche bei", () => {
+        const newRequest = table.rows[0].map((value, i) => i === 0 ? "00006503-0c18-ef11-9f89-6045bda06fb3" : i === 1 ? "CAS-2" : i === 2 ? "Starter: Neue Anfrage" : value);
         render(<Servicedesk />);
-        expect(querySemanticModel).not.toHaveBeenCalled();
         const search = screen.getByRole("searchbox", { name: "Servicedesk-Anfragen durchsuchen" });
-        const refresh = screen.getByRole("button", { name: "Anfragen aktualisieren" });
         fireEvent.change(search, { target: { value: "Starter" } });
-        fireEvent.click(refresh);
-        expect(screen.getByRole("button", { name: /Status.*Aktiv/ })).toBeInTheDocument();
-        expect(refresh).toBeDisabled();
-        expect(screen.getByRole("link", { name: table.rows[0][1] })).toBeInTheDocument();
-        await screen.findByText("Keine Anfragen entsprechen der Suche „Starter“.");
-        expect(querySemanticModel).toHaveBeenCalledExactlyOnceWith("servicedesk-status-live", expect.stringContaining(table.rows[0][0]), true);
-        expect(vi.mocked(querySemanticModel).mock.calls[0][1]).not.toContain(other[0]);
-        expect(refresh).toBeEnabled();
-        expect(search).toHaveValue("Starter");
-        expect(screen.queryByRole("link", { name: table.rows[0][1] })).not.toBeInTheDocument();
-        fireEvent.change(search, { target: { value: "" } });
-        expect(screen.getByRole("link", { name: "CAS-2" })).toBeInTheDocument();
-    });
-
-    it("aktualisiert mehr als 1.000 gefilterte Anfragen in aufeinanderfolgenden Blöcken", async () => {
-        const rows = Array.from({ length: 1001 }, (_, index) => {
-            const id = `${index.toString(16).padStart(8, "0")}-0c18-ef11-9f89-6045bda06fb3`;
-            return table.rows[0].map((value, i) => i === 0 ? id : i === 1 ? `CAS-${index}` : value);
-        });
-        mockRequestTarget.mockReturnValue({
-            status: "ready", data: toDataTable({ ...table, rows }, requests().columnMetadata), isCrossHighlightActive: false,
-        });
-        const statusColumns = [table.columns[0], table.columns[6], table.columns[7]];
-        const response = (batch: typeof rows) => ({
-            status: "success" as const, table: { columns: statusColumns, rows: batch.map(row => [row[0], "Behoben", "Problem behoben"]) },
-            requestId: "", fromCache: false,
-        });
-        vi.mocked(querySemanticModel).mockResolvedValueOnce(response(rows.slice(0, 1000))).mockResolvedValueOnce(response(rows.slice(1000)));
-        render(<Servicedesk />);
         fireEvent.click(screen.getByRole("button", { name: "Anfragen aktualisieren" }));
-        await screen.findByText("Keine Anfragen für die gewählten Filter vorhanden.");
-        const calls = vi.mocked(querySemanticModel).mock.calls;
-        expect(calls.map(([connection, query]) => [connection, query.match(/"[0-9a-f-]{36}"/g)?.length])).toEqual([
-            ["servicedesk-status-live", 1000], ["servicedesk-status-live", 1],
-        ]);
-        expect(calls[0][1]).not.toContain(rows[1000][0]);
-        expect(calls[1][1]).toContain(rows[1000][0]);
+        expect(mockRequestTarget).toHaveBeenLastCalledWith("requests", requests, {}, undefined, 1, liveRequests);
+        mockRequestTarget.mockReturnValue({
+            status: "ready", data: toDataTable({ ...table, rows: [table.rows[0], newRequest] }, requests().columnMetadata), isCrossHighlightActive: false,
+        });
+        fireEvent.change(search, { target: { value: "Neue Anfrage" } });
+        expect(screen.getByRole("button", { name: /Status.*Aktiv/ })).toBeInTheDocument();
+        expect(search).toHaveValue("Neue Anfrage");
+        expect(screen.getByRole("link", { name: "CAS-2" })).toBeInTheDocument();
     });
 
     it("speichert, wendet an, ändert und löscht ein benutzerbezogenes Lesezeichen", async () => {

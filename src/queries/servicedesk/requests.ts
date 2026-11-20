@@ -23,3 +23,7 @@ export function requests({ interactionFilters = [] }: ManagedQueryFactoryParams 
         } satisfies ColumnMetadataMap,
     };
 }
+
+export function liveRequests(params: ManagedQueryFactoryParams = {}) {
+    return { ...requests(params), connection: "servicedesk-status-live" };
+}

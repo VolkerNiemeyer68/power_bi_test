@@ -1,7 +1,0 @@
-EVALUATE
-    SUMMARIZECOLUMNS(
-        'incident'[Anfrage],
-        'incident'[statecodename],
-        'incident'[statuscodename],
-        TREATAS({/*__REQUEST_IDS__*/BLANK()}, 'incident'[Anfrage])
-    )

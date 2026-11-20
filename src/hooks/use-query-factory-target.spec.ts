@@ -148,6 +148,46 @@ describe("useQueryFactoryTarget", () => {
         );
     });
 
+    it("uses the refresh factory once with all current filters, then returns to the normal factory", async () => {
+        const liveFactory = (params: SalesParams): DataQuery => ({ ...salesByCategory(params), connection: "live" });
+        const { rerender } = renderHook(
+            ({ refreshVersion }) => useQueryFactoryTarget("salesGrid", salesByCategory, { region: "West" }, undefined, refreshVersion, liveFactory),
+            { initialProps: { refreshVersion: 0 } },
+        );
+        await latestLoader()(contextFor(false));
+        expect(executeQueryFactory.mock.lastCall?.[0].connection).toBe("sales");
+
+        rerender({ refreshVersion: 1 });
+        const loader = latestLoader();
+        await loader({
+            isCrossHighlightActive: false,
+            compiledFilters: { getFilters: () => ["owner filter", "department filter"] } as CompiledDaxFilters,
+        });
+        expect(executeQueryFactory).toHaveBeenLastCalledWith(
+            liveFactory({ region: "West", interactionFilters: ["owner filter", "department filter"] }), true,
+        );
+        await loader(contextFor(false, () => "next filter"));
+        expect(executeQueryFactory).toHaveBeenLastCalledWith(
+            salesByCategory({ region: "West", interactionFilters: ["next filter"] }), false,
+        );
+    });
+
+    it("propagates a live refresh error and uses the normal factory on a later filter change", async () => {
+        const liveFactory = (params: SalesParams): DataQuery => ({ ...salesByCategory(params), connection: "live" });
+        const { rerender } = renderHook(
+            ({ refreshVersion }) => useQueryFactoryTarget("salesGrid", salesByCategory, { region: "West" }, undefined, refreshVersion, liveFactory),
+            { initialProps: { refreshVersion: 0 } },
+        );
+        rerender({ refreshVersion: 1 });
+        const loader = latestLoader();
+        executeQueryFactory.mockRejectedValueOnce(new Error("Live query failed"));
+        await expect(loader(contextFor(false))).rejects.toThrow("Live query failed");
+        await loader(contextFor(false, () => "new filter"));
+        expect(executeQueryFactory).toHaveBeenLastCalledWith(
+            salesByCategory({ region: "West", interactionFilters: ["new filter"] }), false,
+        );
+    });
+
     it("returns the baseline as both datasets when no highlight is active", async () => {
         renderHook(() => useQueryFactoryTarget("salesChart", salesByCategory, { region: "West" }, alignment));
 

@@ -48,7 +48,8 @@ export type QueryFactoryTargetState<TData extends InteractionTargetData> = {
  * filters to the factory and returns one table. With a highlight alignment, it also runs the factory
  * under the highlight filters during an active cross-highlight and returns `{ all, highlighted }`.
  * `params` are the factory's app inputs other than `interactionFilters`.
- * Increment `refreshVersion` to bypass the cache on the next load only.
+ * Increment `refreshVersion` to bypass the cache on the next load only. An optional
+ * `refreshFactory` replaces the normal factory for that one load.
  */
 export function useQueryFactoryTarget<TParams extends ManagedQueryFactoryParams>(
     targetId: string,
@@ -56,6 +57,7 @@ export function useQueryFactoryTarget<TParams extends ManagedQueryFactoryParams>
     params: Omit<TParams, "interactionFilters">,
     highlightAlignment?: undefined,
     refreshVersion?: number,
+    refreshFactory?: (params: TParams) => DataQuery,
 ): QueryFactoryTargetState<DataTable>;
 export function useQueryFactoryTarget<TParams extends ManagedQueryFactoryParams>(
     targetId: string,
@@ -63,6 +65,7 @@ export function useQueryFactoryTarget<TParams extends ManagedQueryFactoryParams>
     params: Omit<TParams, "interactionFilters">,
     highlightAlignment: HighlightAlignment,
     refreshVersion?: number,
+    refreshFactory?: (params: TParams) => DataQuery,
 ): QueryFactoryTargetState<HighlightData>;
 export function useQueryFactoryTarget<TParams extends ManagedQueryFactoryParams>(
     targetId: string,
@@ -70,6 +73,7 @@ export function useQueryFactoryTarget<TParams extends ManagedQueryFactoryParams>
     params: Omit<TParams, "interactionFilters">,
     highlightAlignment?: HighlightAlignment,
     refreshVersion = 0,
+    refreshFactory?: (params: TParams) => DataQuery,
 ): QueryFactoryTargetState<InteractionTargetData> {
     // Keep track of the loader inputs and only update them when the JSON-serialized key changes.
     // This prevents unnecessary reloads when inline objects are used.
@@ -80,8 +84,8 @@ export function useQueryFactoryTarget<TParams extends ManagedQueryFactoryParams>
     }
 
     const loader: InteractionTargetLoader = useMemo(
-        (): InteractionTargetLoader => createQueryFactoryLoader(factory, loaderInputs.params, loaderInputs.highlightAlignment, loaderInputs.bypassCache),
-        [factory, loaderInputs],
+        (): InteractionTargetLoader => createQueryFactoryLoader(factory, loaderInputs.params, loaderInputs.highlightAlignment, loaderInputs.bypassCache, refreshFactory),
+        [factory, loaderInputs, refreshFactory],
     );
 
     return useManagedInteractionTarget(targetId, loader);
@@ -92,6 +96,7 @@ function createQueryFactoryLoader<TParams extends ManagedQueryFactoryParams>(
     params: Omit<TParams, "interactionFilters">,
     highlightAlignment: HighlightAlignment | undefined,
     bypassNextLoad: boolean,
+    refreshFactory?: (params: TParams) => DataQuery,
 ): InteractionTargetLoader {
     // `params` holds every factory input except `interactionFilters`, so adding the filters gives the
     // factory its complete input. TypeScript cannot prove that `Omit<TParams, "interactionFilters">`
@@ -99,8 +104,9 @@ function createQueryFactoryLoader<TParams extends ManagedQueryFactoryParams>(
     return async ({ isCrossHighlightActive, compiledFilters }: InteractionTargetLoadContext): Promise<InteractionTargetData> => {
         const bypassCache = bypassNextLoad;
         bypassNextLoad = false;
+        const selectedFactory = bypassCache && refreshFactory ? refreshFactory : factory;
         const loadTable = (interactionFilters: readonly string[]): Promise<DataTable> =>
-            executeQueryFactory(factory({ ...params, interactionFilters } as TParams), bypassCache);
+            executeQueryFactory(selectedFactory({ ...params, interactionFilters } as TParams), bypassCache);
 
         if (highlightAlignment) {
             if (isCrossHighlightActive) {

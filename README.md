@@ -27,6 +27,11 @@ Für `bg-pp@brand-group.com` bleibt der Bearbeiterfilter leer.
 Fehlt bei anderen Benutzern eine eindeutige Zuordnung, zeigt die App einen
 Fehler an, statt versehentlich ungefilterte Anfragen zu laden.
 
+Unter der Überschrift zeigt die App den nächsten Termin des dokumentierten
+halbstündlichen Importzeitplans in Berliner Zeit. Der Termin wird aus der
+Geräteuhr berechnet, nicht live aus Fabric abgefragt; Änderungen am Zeitplan
+oder verzögerte und fehlgeschlagene Importe werden nicht erkannt.
+
 Die Abteilungszuordnung verwendet die aktive Beziehung
 `incident[customerid]` → `contact[Kontakt]`. Die anfängliche Sortierung erfolgt
 aufsteigend nach dem unveränderten Modellmeasure `Sortierung`, danach nach
@@ -40,15 +45,13 @@ geladen. Die erste Anfragenabfrage startet erst nach Übernahme der
 Standardfilter durch den InteractionManager. Filterwechsel werden serverseitig
 ausgewertet; währenddessen bleiben vorhandene Ergebnisse sichtbar, auch bei
 einem Aktualisierungsfehler. Erfolgreiche Ergebnisse verwendet die App aus ihrem
-sitzungsgebundenen Abfragecache. **Anfragen aktualisieren** fragt Status und
-Statusgrund nur für die Treffer der aktuellen Tabelle ab, einschließlich der
-lokalen Suche. Pro DirectQuery-Abfrage werden bis zu 1.000 Anfrage-IDs geladen;
-größere Trefferlisten werden nacheinander abgearbeitet. Anfragen, die nach
-der Aktualisierung nicht mehr zum Statusfilter passen, verschwinden aus der
-Tabelle. Wiedereröffnete Anfragen außerhalb der Tabelle erscheinen mit dem
-nächsten 30-Minuten-Import. Fehlt für eine
-Anfrage der Live-Status oder schlägt die Abfrage fehl, zeigt die App einen
-Hinweis und verwendet den Importstand.
+sitzungsgebundenen Abfragecache. **Anfragen aktualisieren** lädt alle zur
+aktuellen Filterauswahl passenden Anfragen live aus Dynamics, einschließlich
+neuer und wiedereröffneter Anfragen. Die lokale Suche bleibt erhalten und wird
+auf das Live-Ergebnis angewendet. Bei einem Filterwechsel wird wieder der
+Importstand verwendet; erneutes Aktualisieren lädt den neuen Filter live.
+Schlägt die Live-Abfrage fehl, bleibt die bisherige Ansicht mit einer
+Fehlermeldung sichtbar.
 
 Der Live-Connector wurde am 19.11.2026 mit dem Besitzerkonto der produktiven
 Fabric-App `servicedesk_rayfin` veröffentlicht. Für einen Rückfall auf die reine
@@ -118,12 +121,21 @@ Die frühere Berechtigungsgrenze der Rayfin-Anmeldung bleibt bestehen:
 Übernahme, Verbindungszuordnung und Erstimport wurden deshalb über die
 reguläre Fabric-Oberfläche mit `bg-pp@brand-group.com` durchgeführt.
 
-### DirectQuery für Live-Status
+### DirectQuery für Live-Anfragen
 
 Das produktiv verwendete Modell [Servicedesk Status Live – DirectQuery Pilot](https://app.fabric.microsoft.com/groups/08775ebe-0b0d-4aa5-982e-6da664c5cae0/datasets/bbd4c88f-5f0b-4742-b163-64b8bd87ac1e/details)
 bleibt trotz seines Namens in Betrieb. Der App-Connector `servicedesk-status-live`
 nutzt die Cloud-Verbindung `Dynamics_Servicedesk Neu` mit Dataverse-SSO für
 DirectQuery. Das Live-Modell braucht keinen geplanten Datenimport.
+Es enthält die für die Anfragetabelle benötigten Felder, die Measures `Link`
+und `Sortierung` sowie die Abteilungsbeziehung; die bestehende Statusabfrage
+bleibt kompatibel. Am 20.11.2026 wurde das bestehende DirectQuery-Modell um
+die Anfragedetails und eine DirectQuery-Tabelle `contact` erweitert. Die
+Feldzuordnungen und Measures entsprechen der Definition des Importmodells;
+`incident[customerid]` ist mit `contact[Kontakt]` aktiv verbunden.
+Nach einer Änderung der Modelldefinition muss die Bindung an
+`Dynamics_Servicedesk Neu` geprüft und gegebenenfalls durch den Modellbesitzer
+wiederhergestellt werden. Das Modell benötigt kein lokales Gateway.
 
 `Azure_SharePoint_SE_Mitglieder` hat Lesen- und Build-Rechte am Live-Modell.
 Dynamics-Leserechte bleiben Voraussetzung; bei fehlendem Zugriff bleibt die

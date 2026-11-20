@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { DataGrid, type GridColumnDef } from "@microsoft/fabric-datagrid";
 import { DropdownSlicer } from "@microsoft/fabric-slicers";
@@ -14,11 +14,15 @@ import { searchDataTable } from "@/lib/search-data-table";
 import { formatLocaleDateTime } from "@/lib/format-locale-date-time";
 import { cn } from "@/lib/utils";
 import { bookmarkFilterFields, parseBookmarkFilters, serializeBookmarkFilters, type BookmarkFilters } from "@/lib/servicedesk-bookmarks";
-import { defaults, filterOptions, overlayLiveStatus, readDefaults, requests } from "@/queries/servicedesk";
+import { defaults, filterOptions, liveRequests, readDefaults, requests } from "@/queries/servicedesk";
 
 const defaultsQuery = defaults();
 const optionsQuery = filterOptions();
-const liveStatusEnabled = import.meta.env.VITE_SERVICEDESK_LIVE_STATUS !== "disabled";
+const liveRequestsEnabled = import.meta.env.VITE_SERVICEDESK_LIVE_STATUS !== "disabled";
+const refreshInterval = 30 * 60 * 1000;
+const refreshTimeFormat = new Intl.DateTimeFormat("de-DE", {
+    dateStyle: "short", timeStyle: "short", timeZone: "Europe/Berlin",
+});
 const columnWeights = {
     number: 1,
     title: 3,
@@ -59,6 +63,7 @@ export function Servicedesk() {
         <main className="px-2 py-10 sm:px-4 sm:py-14">
             <p className="text-200 font-semibold uppercase tracking-wider text-brand-foreground">Service / Servicedesk</p>
             <h1 className="mt-3 font-page-title text-page-title text-emphasis-foreground">Servicedesk-Anfragen</h1>
+            <NextScheduledRefresh />
             <p className="mt-2 font-page-subtitle text-page-subtitle text-muted-foreground">Standardmäßig aktive Anfragen mit Ihnen als Bearbeiter. Für bg-pp@brand-group.com bleibt der Bearbeiterfilter leer. Alle Filter sind anpassbar.</p>
             <p className="mt-2 text-300 text-muted-foreground">Ein Klick auf Anfragenummer oder Titel öffnet die Anfrage im Servicedesk in einem neuen Tab.</p>
             <div className="mt-10">
@@ -70,6 +75,32 @@ export function Servicedesk() {
             </div>
         </main>
     );
+}
+
+function NextScheduledRefresh() {
+    const [now, setNow] = useState(Date.now);
+
+    useEffect(() => {
+        let timer: ReturnType<typeof setTimeout>;
+        const update = () => {
+            clearTimeout(timer);
+            const current = Date.now();
+            setNow(current);
+            timer = setTimeout(update, refreshInterval - current % refreshInterval);
+        };
+        update();
+        document.addEventListener("visibilitychange", update);
+        return () => {
+            clearTimeout(timer);
+            document.removeEventListener("visibilitychange", update);
+        };
+    }, []);
+
+    const next = new Date((Math.floor(now / refreshInterval) + 1) * refreshInterval);
+    return <p className="mt-2 text-300 text-muted-foreground">
+        Nächstes geplantes Datenupdate: <time dateTime={next.toISOString()}>{refreshTimeFormat.format(next)}</time> Uhr (Berlin).
+        Der tatsächliche Import kann sich verzögern.
+    </p>;
 }
 
 function Loading() {
@@ -106,7 +137,7 @@ function ManagedRequests({ owner, options }: { owner: string | null; options: Da
             requests: { kind: "grid", selectableFields: ["id"] },
         },
     }));
-    return <InteractionManagerProvider manager={manager}><RequestFilters owner={owner} options={options} manager={manager} /></InteractionManagerProvider>;
+    return <InteractionManagerProvider manager={manager}><RequestFilters owner={owner} options={options} /></InteractionManagerProvider>;
 }
 
 function slicerSelection(selections: readonly SemanticSelection[]): (string | null)[] | null {
@@ -116,7 +147,7 @@ function slicerSelection(selections: readonly SemanticSelection[]): (string | nu
     ));
 }
 
-function RequestFilters({ owner, options, manager }: { owner: string | null; options: DataTable; manager: InteractionManager }) {
+function RequestFilters({ owner, options }: { owner: string | null; options: DataTable }) {
     const ownerSource = useManagedInteractionSource("owner");
     const employeeSource = useManagedInteractionSource("employee");
     const departmentSource = useManagedInteractionSource("department");
@@ -151,7 +182,7 @@ function RequestFilters({ owner, options, manager }: { owner: string | null; opt
             department: departmentSource,
             state: stateSource,
         }} />
-        {initialized && errors.length === 0 && <RequestGrid manager={manager} />}
+        {initialized && errors.length === 0 && <RequestGrid />}
     </>;
 }
 
@@ -326,54 +357,16 @@ function RequestSlicer({ field, title, source, options }: { field: string; title
     return <DropdownSlicer data={options} column={field} title={title} theme={theme} selection={selection} onInteraction={source.onInteraction} />;
 }
 
-function RequestGrid({ manager }: { manager: InteractionManager }) {
+function RequestGrid() {
     const { theme } = useThemeContext();
     const source = useManagedInteractionSource("requests");
     const [refreshVersion, setRefreshVersion] = useState(0);
-    const result = useQueryFactoryTarget("requests", requests, {}, undefined, refreshVersion);
-    const subscribe = useCallback((listener: () => void) => manager.subscribeTarget("requests", listener), [manager]);
-    const snapshot = useCallback(() => manager.getTargetState("requests"), [manager]);
-    const view = useSyncExternalStore(subscribe, snapshot);
-    const [live, setLive] = useState<{ revision: number; pending?: boolean; message?: string; error?: boolean; data?: DataTable }>();
-    const requestInFlight = useRef(false);
-    const activeLive = live?.revision === view.revision ? live : undefined;
-    const isRefreshing = result.status === "refreshing" || Boolean(activeLive?.pending);
-    const isBusy = result.status === "loading" || isRefreshing || Boolean(live?.pending);
-    const retryImport = () => {
-        setLive(undefined);
+    const result = useQueryFactoryTarget("requests", requests, {}, undefined, refreshVersion, liveRequestsEnabled ? liveRequests : undefined);
+    const isRefreshing = result.status === "refreshing";
+    const isBusy = result.status === "loading" || isRefreshing;
+    const loadedData = result.status === "loading" || result.status === "error" ? undefined : result.data;
+    const refreshRequests = () => {
         setRefreshVersion(value => value + 1);
-    };
-    const refresh = async () => {
-        if (requestInFlight.current || isBusy) return;
-        if (!liveStatusEnabled || result.status !== "ready") {
-            retryImport();
-            return;
-        }
-        if (!loadedData || !searchedData) return;
-        const revision = view.revision;
-        const isCurrent = () => snapshot().revision === revision;
-        requestInFlight.current = true;
-        setLive(previous => ({ revision, pending: true, data: previous?.revision === revision ? previous.data : undefined }));
-        try {
-            const selectedStates = slicerSelection(view.filters.find(filter => filter.sourceId === "state")?.selections ?? []) ?? [];
-            const overlay = await overlayLiveStatus(loadedData, searchedData.rows, selectedStates, isCurrent);
-            if (!overlay || !isCurrent()) return;
-            const message = overlay.missing
-                ? `Live-Status für ${overlay.live} Anfragen. Für ${overlay.missing} Anfragen ist kein Live-Status verfügbar; dort gilt der Importstand.`
-                : overlay.live
-                    ? `Status für ${overlay.live} Anfragen live aus Dynamics geladen. Andere Felder stammen aus dem Import.`
-                    : "Keine Anfragen in der gefilterten Tabelle zum Aktualisieren.";
-            setLive({ revision, data: overlay.data, message });
-        } catch {
-            if (isCurrent()) setLive({
-                revision,
-                error: true,
-                message: "Live-Status konnte nicht geladen werden. Die Importansicht bleibt sichtbar. Prüfen Sie bei wiederholtem Fehler Ihren Dynamics- und Fabric-Zugriff.",
-            });
-        } finally {
-            requestInFlight.current = false;
-            if (!isCurrent()) setLive(previous => previous?.pending && previous.revision === revision ? undefined : previous);
-        }
     };
     const containerRef = useRef<HTMLDivElement>(null);
     const [availableWidth, setAvailableWidth] = useState<number>();
@@ -393,7 +386,7 @@ function RequestGrid({ manager }: { manager: InteractionManager }) {
         });
         observer.observe(container);
         return () => observer.disconnect();
-    }, [result.status, activeLive?.data]);
+    }, [result.status, loadedData]);
     const responsiveColumns = useMemo(() => {
         const totalWeight = Object.values(columnWeights).reduce((total, weight) => total + weight, 0);
         return columns.map(column => ({
@@ -407,7 +400,6 @@ function RequestGrid({ manager }: { manager: InteractionManager }) {
         }));
     }, [availableWidth, locale]);
     const searchableColumns = useMemo(() => columns.map(column => column.id), []);
-    const loadedData = activeLive?.data ?? (result.status === "loading" || result.status === "error" ? undefined : result.data);
     const searchedData = useMemo(
         () => loadedData ? searchDataTable(loadedData, search, searchableColumns) : undefined,
         [loadedData, search, searchableColumns],
@@ -426,17 +418,16 @@ function RequestGrid({ manager }: { manager: InteractionManager }) {
                     />
                 </label>
             )}
-            <button type="button" onClick={() => void refresh()} disabled={isBusy} aria-describedby="requests-refresh-hint" className="inline-flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-200 font-semibold hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50">
+            <button type="button" onClick={refreshRequests} disabled={isBusy} aria-describedby="requests-refresh-hint" className="inline-flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-200 font-semibold hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50">
                 <RefreshCw aria-hidden="true" className={cn("icon-size-200", isRefreshing && "motion-safe:animate-spin")} />
                 Anfragen aktualisieren
             </button>
         </div>
-        <p id="requests-refresh-hint" className="mb-4 text-200 text-muted-foreground">{liveStatusEnabled
-            ? "Ruft Status und Statusgrund für die Treffer der gefilterten Tabelle live ab. Anfragen außerhalb der Tabelle erscheinen nach dem nächsten Import (alle 30 Minuten geplant)."
+        <p id="requests-refresh-hint" className="mb-4 text-200 text-muted-foreground">{liveRequestsEnabled
+            ? "Lädt alle Anfragen für die gewählten Filter live aus Dynamics, einschließlich neuer Anfragen. Bei einem Filterwechsel wird wieder der Importstand verwendet."
             : "Lädt die aktuelle Filteransicht aus Fabric. Statusänderungen erscheinen nach dem geplanten Datenimport (alle 30 Minuten)."}</p>
         {isRefreshing && <p role="status" className="mb-4 text-300 text-muted-foreground">Anfragen werden aktualisiert …</p>}
-        {activeLive?.message && <p role={activeLive.error ? "alert" : "status"} className={cn("mb-4 text-200", activeLive.error ? "text-destructive" : "text-muted-foreground")}>{activeLive.message}</p>}
-        {(result.status === "error" || result.status === "refresh-error") && <LoadError message={result.error.message} retry={retryImport} />}
+        {(result.status === "error" || result.status === "refresh-error") && <LoadError message={result.error.message} retry={refreshRequests} />}
         {source.error && <p role="alert" className="text-300 text-destructive">{source.error.message}</p>}
         {result.status === "loading" && <Loading />}
         {loadedData && searchedData && (

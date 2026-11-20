@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { requests } from "./requests";
+import { liveRequests, requests } from "./requests";
 
 describe("requests", () => {
     it("wendet alle Managerfilter vor den Measures an und sortiert nach dem Modellmeasure", () => {
@@ -28,5 +28,10 @@ describe("requests", () => {
         expect(query).not.toContain("USERPRINCIPALNAME");
         expect(query).not.toContain("/*__FILTER_ARGUMENTS__*/");
         expect(query).not.toMatch(/,\s*,/);
+    });
+
+    it("verwendet für Live-Anfragen dieselbe Abfrage, Filter und Spalten wie der Import", () => {
+        const params = { interactionFilters: [`TREATAS({"Aktiv"}, 'incident'[statecodename])`, `TREATAS({"IT"}, 'contact'[Abteilung])`] };
+        expect(liveRequests(params)).toEqual({ ...requests(params), connection: "servicedesk-status-live" });
     });
 });
